@@ -6,4 +6,5 @@ export enum Subjects {
   OrderCancelled = "order:cancelled",
 
   PaymentCreated = "payment:created",
+  PaymentCreatedFailed = "payment:created:failed",
 }
