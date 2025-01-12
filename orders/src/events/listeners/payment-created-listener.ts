@@ -14,27 +14,14 @@ export class PaymentCreatedListener extends Listener<PaymentCreatedEvent> {
   queueGroupName = queueGroupName;
 
   async onMessage(data: PaymentCreatedEvent["data"], msg: Message) {
-    const order = await Order.findById(data.orderId);
+    const orderUpdateResult = await Order.updateOne(
+      { _id: data.orderId, status: OrderStatus.Created },
+      { status: OrderStatus.Complete }
+    );
 
-    if (!order) {
-      throw new Error("Order not found");
-    }
-
-    if (order.status === OrderStatus.Cancelled) {
-      // Order was expired before payment
-      // Publishing an event saying this payment was failed!
-
+    if (orderUpdateResult.matchedCount !== 1) {
       await new PaymentCreatedFailedPublisher(this.client).publish(data);
-
-      msg.ack();
-      return;
     }
-
-    order.set({
-      status: OrderStatus.Complete,
-    });
-    await order.save();
-
     msg.ack();
   }
 }
