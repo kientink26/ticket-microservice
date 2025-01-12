@@ -17,7 +17,7 @@ export class OrderCreatedListener extends Listener<OrderCreatedEvent> {
     }
 
     // Mark the ticket as being reserved by setting its orderId property
-    ticket.set({ orderId: data.id });
+    ticket.set({ orderId: data.id, price: data.ticket.price });
 
     // Save the ticket
     await ticket.save();
