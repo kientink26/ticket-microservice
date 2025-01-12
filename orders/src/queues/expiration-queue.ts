@@ -2,6 +2,7 @@ import Queue from "bull";
 import { Order, OrderStatus } from "../models/order";
 import { OrderCancelledPublisher } from "../events/publishers/order-cancelled-publisher";
 import { natsWrapper } from "../nats-wrapper";
+import { Ticket } from "../models/ticket";
 
 interface Payload {
   orderId: string;
@@ -16,29 +17,29 @@ const expirationQueue = new Queue<Payload>("order:expiration", {
 expirationQueue.process(async (job) => {
   console.log(`Order ${job.data.orderId} is expired !!!`);
 
-  const order = await Order.findById(job.data.orderId).populate("ticket");
+  const orderUpdateResult = await Order.updateOne(
+    { _id: job.data.orderId, status: OrderStatus.Created },
+    { status: OrderStatus.Cancelled }
+  );
 
-  if (!order) {
-    throw new Error("Order not found");
+  if (orderUpdateResult.matchedCount === 1) {
+    const cancelledOrder = (await Order.findById(job.data.orderId).populate(
+      "ticket"
+    ))!;
+
+    await Ticket.updateOne(
+      { _id: cancelledOrder.ticket.id },
+      { reserved: false }
+    );
+
+    await new OrderCancelledPublisher(natsWrapper.client).publish({
+      id: cancelledOrder.id,
+      version: cancelledOrder.version,
+      ticket: {
+        id: cancelledOrder.ticket.id,
+      },
+    });
   }
-
-  if (order.status === OrderStatus.Complete) {
-    // Order is already complete before expiration
-    return;
-  }
-
-  // Cancel the order due to expiration
-  order.set({
-    status: OrderStatus.Cancelled,
-  });
-  await order.save();
-  await new OrderCancelledPublisher(natsWrapper.client).publish({
-    id: order.id,
-    version: order.version,
-    ticket: {
-      id: order.ticket.id,
-    },
-  });
 });
 
 export { expirationQueue };
